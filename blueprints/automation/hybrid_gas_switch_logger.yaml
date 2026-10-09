@@ -1,0 +1,231 @@
+blueprint:
+  name: Hybrid heat pump - gas switch logger
+  description: >-
+    Records when a hybrid heating system (heat pump + gas boiler) switches the
+    heating to gas and back, using the gas meter: gas that keeps flowing
+    (a second meter step within a few minutes) = switched to gas; no new meter
+    reading for a while = back to the heat pump.
+
+
+    For every switch to gas it stores the outdoor temperature, the energy cost
+    ratio in force and whether the compressor was still running (then the boiler
+    is only assisting, marked "p") in an input_text history, newest first, e.g.
+    `5.9@1.5,8.1@1.5p,6.0@1.5`. The Hybrid Heatpump Energy Forecast app uses the
+    median of the last 5 real switches as its bivalence temperature.
+    A logbook line is written for every switch.
+
+
+    Assumes all gas use is space heating (no gas hot water). The helpers are
+    created automatically by the Hybrid Heatpump Energy Forecast app
+    (option create_helpers), or create them by hand (see README).
+  domain: automation
+  author: eddysteurs
+  source_url: https://github.com/eddysteurs/hybrid-heatpump-energy-forecast/blob/main/blueprints/automation/hybrid_gas_switch_logger.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    sources:
+      name: Sources
+      input:
+        gas_meter:
+          name: Gas meter
+          description: Cumulative gas meter (m³ or kWh), e.g. the P1 / DSMR gas sensor.
+          selector:
+            entity:
+              filter:
+                - domain: sensor
+        outdoor_temperature:
+          name: Outdoor temperature
+          description: >-
+            Preferably the outdoor sensor of the hybrid controller itself
+            (e.g. EMS-ESP sensor.boiler_outside_temperature), since that is what it decides on.
+          selector:
+            entity:
+              filter:
+                - domain: sensor
+                  device_class: temperature
+        compressor:
+          name: Compressor running (optional)
+          description: >-
+            Binary sensor that is on while the heat pump compressor runs
+            (e.g. EMS-ESP binary_sensor.boiler_hp_compressor). Used to mark gas that only
+            assists the heat pump; those entries are not used as switch temperature.
+          default: ""
+          selector:
+            entity:
+              filter:
+                - domain: binary_sensor
+        energy_cost_ratio:
+          name: Energy cost ratio (optional)
+          description: >-
+            Electricity/gas price ratio set in the hybrid controller
+            (e.g. EMS-ESP number.thermostat_energy_cost_ratio). Stored with every switch so
+            switches recorded at another setting are ignored.
+          default: ""
+          selector:
+            entity:
+              filter:
+                - domain:
+                    - number
+                    - input_number
+                    - sensor
+    helpers:
+      name: Helpers
+      collapsed: true
+      input:
+        on_gas_helper:
+          name: On gas state
+          default: input_boolean.hybrid_on_gas
+          selector:
+            entity:
+              filter:
+                - domain: input_boolean
+        last_step_helper:
+          name: Time of last gas meter step
+          default: input_datetime.hybrid_last_gas_step
+          selector:
+            entity:
+              filter:
+                - domain: input_datetime
+        switch_temp_helper:
+          name: Last switch-to-gas temperature
+          default: input_number.hybrid_gas_switch_temp
+          selector:
+            entity:
+              filter:
+                - domain: input_number
+        return_temp_helper:
+          name: Last back-to-heat-pump temperature
+          default: input_number.hybrid_hp_return_temp
+          selector:
+            entity:
+              filter:
+                - domain: input_number
+        history_helper:
+          name: Switch history (input_text, max 255)
+          default: input_text.hybrid_gas_switch_history
+          selector:
+            entity:
+              filter:
+                - domain: input_text
+    timing:
+      name: Timing
+      collapsed: true
+      input:
+        confirm_minutes:
+          name: Confirm gas flow within
+          description: A second gas meter step within this time means gas really flows (filters one-off blips).
+          default: 20
+          selector:
+            number:
+              min: 5
+              max: 60
+              unit_of_measurement: min
+        stop_minutes:
+          name: Gas stopped after
+          description: No new gas meter reading for this long = back on the heat pump.
+          default: 45
+          selector:
+            number:
+              min: 15
+              max: 180
+              unit_of_measurement: min
+
+mode: queued
+max: 10
+
+variables:
+  outdoor_entity: !input outdoor_temperature
+  compressor_entity: !input compressor
+  ratio_entity: !input energy_cost_ratio
+  last_step_entity: !input last_step_helper
+  switch_temp_entity: !input switch_temp_helper
+  history_entity: !input history_helper
+  confirm_minutes: !input confirm_minutes
+  stop_minutes: !input stop_minutes
+  t_out: "{{ states(outdoor_entity) | float(0) }}"
+  ratio: "{{ states(ratio_entity) | float(0) if ratio_entity else 0 }}"
+  comp: "{{ states(compressor_entity) if compressor_entity else 'off' }}"
+
+triggers:
+  - trigger: state
+    entity_id: !input gas_meter
+    id: gas_step
+  - trigger: state
+    entity_id: !input gas_meter
+    for:
+      minutes: !input stop_minutes
+    id: gas_stopped
+
+conditions: []
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: gas_step
+          - condition: template
+            value_template: >-
+              {{ trigger.platform == 'state'
+                 and is_number(trigger.from_state.state) and is_number(trigger.to_state.state)
+                 and trigger.to_state.state | float > trigger.from_state.state | float }}
+        sequence:
+          - if:
+              - condition: state
+                entity_id: !input on_gas_helper
+                state: "off"
+              - condition: template
+                value_template: >-
+                  {{ state_attr(last_step_entity, 'timestamp') is not none
+                     and now().timestamp() - state_attr(last_step_entity, 'timestamp') < confirm_minutes * 60 }}
+            then:
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: !input on_gas_helper
+              - action: input_number.set_value
+                target:
+                  entity_id: !input switch_temp_helper
+                data:
+                  value: "{{ t_out }}"
+              - action: input_text.set_value
+                target:
+                  entity_id: !input history_helper
+                data:
+                  value: >-
+                    {%- set entry = '%.1f@%.1f%s' % (t_out | float, ratio | float, 'p' if comp == 'on' else '') -%}
+                    {%- set items = ([entry] + (states(history_entity).split(',') | reject('in', ['', 'unknown', 'unavailable']) | list))[:14] -%}
+                    {%- set ns = namespace(out=items) -%}
+                    {%- for i in range(14) -%}{%- if (ns.out | join(',')) | length > 255 -%}{%- set ns.out = ns.out[:-1] -%}{%- endif -%}{%- endfor -%}
+                    {{ ns.out | join(',') }}
+              - action: logbook.log
+                data:
+                  name: Hybrid
+                  entity_id: !input on_gas_helper
+                  message: >-
+                    switched to gas at {{ t_out }} °C outdoor{{ (' (energy cost ratio ' ~ ratio ~ ')') if ratio_entity else '' }}{{ ', heat pump still running = assist' if comp == 'on' else '' }}
+          - action: input_datetime.set_datetime
+            target:
+              entity_id: !input last_step_helper
+            data:
+              timestamp: "{{ now().timestamp() }}"
+      - conditions:
+          - condition: trigger
+            id: gas_stopped
+          - condition: state
+            entity_id: !input on_gas_helper
+            state: "on"
+        sequence:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: !input on_gas_helper
+          - action: input_number.set_value
+            target:
+              entity_id: !input return_temp_helper
+            data:
+              value: "{{ t_out }}"
+          - action: logbook.log
+            data:
+              name: Hybrid
+              entity_id: !input on_gas_helper
+              message: >-
+                back to heat pump at {{ t_out }} °C outdoor (gas stopped {{ stop_minutes }} min ago, switched to gas at {{ states(switch_temp_entity) }} °C)

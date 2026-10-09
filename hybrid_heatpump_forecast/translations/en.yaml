@@ -1,0 +1,41 @@
+configuration:
+  boiler_efficiency:
+    name: Boiler efficiency
+    description: Gas boiler efficiency (heat out / gas in), e.g. 0.92 for a condensing boiler.
+  create_helpers:
+    name: Create missing helpers
+    description: >-
+      On start, create the input_number / input_text / input_boolean / input_datetime
+      helpers the model and the gas switch logger blueprint use, when they do not exist yet.
+  indoor_temp_entity:
+    name: Indoor temperature sensor
+    description: Representative room temperature (starting point of the thermal simulation). Optional.
+  hp_energy_today_entity:
+    name: Heat pump electricity today
+    description: >-
+      Sensor with today's heat pump electricity in kWh, resetting at midnight. Optional, used for
+      "today total", the 48 h cumulative series and forecast-vs-actual.
+  gas_energy_today_entity:
+    name: Gas today
+    description: Sensor with today's gas use in kWh, resetting at midnight. Optional, used for forecast-vs-actual.
+  energy_cost_ratio_entity:
+    name: Energy cost ratio entity
+    description: >-
+      Number entity with the electricity/gas price ratio set in the hybrid controller
+      (e.g. number.thermostat_energy_cost_ratio from EMS-ESP). Optional; recorded switch
+      temperatures are only used for the ratio that is currently set.
+  switch_history_entity:
+    name: Switch history helper
+    description: input_text written by the gas switch logger blueprint. Default input_text.hybrid_gas_switch_history.
+  sensor_prefix:
+    name: Sensor prefix
+    description: Output sensors are sensor.<prefix>_electricity_today etc. Default "hybrid".
+  timezone:
+    name: Time zone
+    description: Leave empty to use the Home Assistant time zone.
+  ha_url:
+    name: Home Assistant URL
+    description: Only when running outside Home Assistant OS. Leave empty to use the Supervisor API.
+  ha_token:
+    name: Long-lived access token
+    description: Only together with Home Assistant URL. Leave empty inside Home Assistant OS.

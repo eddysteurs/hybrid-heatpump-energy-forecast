@@ -1,0 +1,31 @@
+name: Hybrid Heatpump Energy Forecast
+version: "2.0.0"
+slug: hybrid_heatpump_forecast
+description: >-
+  48 h forecast of heat demand, heat pump electricity and gas for a hybrid
+  heating system (heat pump + gas boiler), with a self-learning switch temperature.
+url: https://github.com/eddysteurs/hybrid-heatpump-energy-forecast
+arch:
+  - aarch64
+  - amd64
+startup: application
+boot: auto
+init: false
+homeassistant_api: true
+map:
+  - addon_config:rw
+options:
+  boiler_efficiency: 0.92
+  create_helpers: true
+schema:
+  boiler_efficiency: float(0.5,1.1)
+  create_helpers: bool
+  indoor_temp_entity: str?
+  hp_energy_today_entity: str?
+  gas_energy_today_entity: str?
+  energy_cost_ratio_entity: str?
+  switch_history_entity: str?
+  sensor_prefix: str?
+  timezone: str?
+  ha_url: str?
+  ha_token: password?
