@@ -135,7 +135,8 @@ in that house, for reference:
 
 2. **Install "Hybrid Heatpump Energy Forecast"**, open its *Configuration* tab and
    fill in the entities you have (all optional, see [Configuration](#configuration)).
-   Start it. On the first start it creates the helpers it needs (option
+   Click **Save** before starting (the log warns about every sensor option that
+   is still empty). Start it. On the first start it creates the helpers it needs (option
    `create_helpers`) and publishes the first forecast; check the *Log* tab.
 
 3. **Import the blueprint**

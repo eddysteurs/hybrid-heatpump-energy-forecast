@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.1
+- The sensor options (indoor temperature, heat pump / gas today, energy cost
+  ratio) are now shown on the Configuration tab by default instead of hidden
+  under "Show unused optional configuration options".
+- The log warns at start for every sensor option that is not set and says what
+  is affected (e.g. the 48 h series then starts at 0).
+
 ## 2.0.0
 - First public version.
 - Uses the Supervisor API: no long-lived token or URL needed.

@@ -1,5 +1,5 @@
 name: Hybrid Heatpump Energy Forecast
-version: "2.0.0"
+version: "2.0.1"
 slug: hybrid_heatpump_forecast
 description: >-
   48 h forecast of heat demand, heat pump electricity and gas for a hybrid
@@ -17,6 +17,10 @@ map:
 options:
   boiler_efficiency: 0.92
   create_helpers: true
+  indoor_temp_entity: ""
+  hp_energy_today_entity: ""
+  gas_energy_today_entity: ""
+  energy_cost_ratio_entity: ""
 schema:
   boiler_efficiency: float(0.5,1.1)
   create_helpers: bool

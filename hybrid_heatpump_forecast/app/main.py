@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-VERSION = "2.0.0"
+VERSION = "2.0.1"
 print(f"Hybrid Heatpump Energy Forecast v{VERSION} starting..", flush=True)
 
 OPTIONS_PATH = "/data/options.json"
@@ -503,6 +503,15 @@ def main():
         f"indoor {INDOOR_ENTITY or '-'}, HP today {HP_TODAY_ENTITY or '-'}, gas today {GAS_TODAY_ENTITY or '-'}, "
         f"cost ratio {RATIO_ENTITY or '-'}, switch history {SWITCH_HISTORY_ENTITY}")
     log(f"Forecast log: {FORECAST_LOG}")
+    for value, name, effect in (
+            (INDOOR_ENTITY, "indoor_temp_entity", "simulation starts at the setpoint"),
+            (HP_TODAY_ENTITY, "hp_energy_today_entity",
+             "today's total and the 48 h cumulative series start at 0, no forecast-vs-actual for electricity"),
+            (GAS_TODAY_ENTITY, "gas_energy_today_entity", "no forecast-vs-actual for gas"),
+            (RATIO_ENTITY, "energy_cost_ratio_entity",
+             "switch temperatures are used regardless of the energy cost ratio they were recorded at")):
+        if not value:
+            log(f"  ! option {name} not set: {effect}")
     if CREATE_HELPERS:
         try:
             create_missing_helpers(all_states())
