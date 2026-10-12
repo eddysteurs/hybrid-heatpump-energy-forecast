@@ -24,6 +24,17 @@ configuration:
       Number entity with the electricity/gas price ratio set in the hybrid controller
       (e.g. number.thermostat_energy_cost_ratio from EMS-ESP). Optional; recorded switch
       temperatures are only used for the ratio that is currently set.
+  weather_model:
+    name: Open-Meteo weather model
+    description: >-
+      Empty = best_match (Open-Meteo picks). E.g. knmi_seamless (HARMONIE 2 km, Benelux),
+      meteofrance_seamless (AROME 1.3 km), icon_seamless (DWD). Use the model comparison in
+      the log to choose.
+  outdoor_temp_entity:
+    name: Measured outdoor temperature
+    description: >-
+      Optional. Outdoor sensor used once a day to compare Open-Meteo models with reality
+      (log line "Models"), e.g. the hybrid controller's own outdoor sensor.
   switch_history_entity:
     name: Switch history helper
     description: input_text written by the gas switch logger blueprint. Default input_text.hybrid_gas_switch_history.

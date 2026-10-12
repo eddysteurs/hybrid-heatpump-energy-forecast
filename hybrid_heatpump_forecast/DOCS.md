@@ -24,6 +24,8 @@ forecast. Full documentation: see the
 | `hp_energy_today_entity` | Heat pump electricity today in kWh (resets at midnight) |
 | `gas_energy_today_entity` | Gas today in kWh (resets at midnight) |
 | `energy_cost_ratio_entity` | Electricity/gas price ratio set in the hybrid controller |
+| `weather_model` | Open-Meteo model, empty = best_match (e.g. `knmi_seamless`, `meteofrance_seamless`) |
+| `outdoor_temp_entity` | Measured outdoor temperature; the log then compares 7 weather models with it once a day |
 | `switch_history_entity` | History written by the blueprint (default `input_text.hybrid_gas_switch_history`) |
 | `sensor_prefix` | Output sensor prefix (default `hybrid`) |
 | `timezone` | Leave empty to use Home Assistant's |

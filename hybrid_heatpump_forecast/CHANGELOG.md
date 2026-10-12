@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.0
+- New option `weather_model`: choose the Open-Meteo model (empty = best_match).
+- New option `outdoor_temp_entity`: at start and once a day after 07:00 the log
+  compares 7 Open-Meteo models (best_match, KNMI HARMONIE, Météo-France AROME,
+  DWD ICON, ECMWF, UKMO, GFS) with the measured outdoor temperature over the last
+  3 days, with error and bias for nights (20-08 h) and all hours. Weather
+  models are often 2-4 °C too warm on clear, calm nights.
+
 ## 2.0.3
 - Fix: an indoor sensor above the setpoint (sun, cooking, morning boost in one
   room) made the model forecast no heating at all for many hours. The

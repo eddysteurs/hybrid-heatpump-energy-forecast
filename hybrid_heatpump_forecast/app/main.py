@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-VERSION = "2.0.3"
+VERSION = "2.1.0"
 print(f"Hybrid Heatpump Energy Forecast v{VERSION} starting..", flush=True)
 
 OPTIONS_PATH = "/data/options.json"
@@ -62,6 +62,11 @@ GAS_TODAY_ENTITY = opt("gas_energy_today_entity")        # daily gas kWh, resets
 RATIO_ENTITY = opt("energy_cost_ratio_entity")           # e.g. number.thermostat_energy_cost_ratio
 SWITCH_HISTORY_ENTITY = opt("switch_history_entity", "input_text.hybrid_gas_switch_history")
 CREATE_HELPERS = bool(cfg.get("create_helpers", True))
+WEATHER_MODEL = opt("weather_model")                     # Open-Meteo model, empty = best_match
+OUTDOOR_ENTITY = opt("outdoor_temp_entity")              # measured outdoor temp, for the model comparison
+COMPARE_MODELS = ["best_match", "knmi_seamless", "meteofrance_seamless", "icon_seamless",
+                  "ecmwf_ifs025", "ukmo_seamless", "gfs_seamless"]
+_compare_done_for = None
 
 # Model parameters: (key, helper entity, legacy helper entity, default, min, max, step, unit)
 # Defaults were fitted on one Belgian house (Oct 2025 - Oct 2026) - calibrate for yours.
@@ -209,7 +214,8 @@ def fetch_weather(lat, lon, tz_name, now: datetime):
         "https://api.open-meteo.com/v1/forecast",
         params={"latitude": lat, "longitude": lon,
                 "hourly": "temperature_2m,shortwave_radiation",
-                "forecast_days": 3, "timezone": tz_name},
+                "forecast_days": 3, "timezone": tz_name,
+                **({"models": WEATHER_MODEL} if WEATHER_MODEL else {})},
         timeout=15,
     )
     r.raise_for_status()
@@ -225,6 +231,62 @@ def fetch_weather(lat, lon, tz_name, now: datetime):
         if len(out) == 48:
             break
     return out
+
+
+def hourly_means_from_history(entity_id: str, start: datetime, end: datetime, tz) -> dict:
+    """{local hour start: mean of the recorded values in that hour}."""
+    data = ha_get(f"history/period/{start.isoformat()}", timeout=30,
+                  params={"end_time": end.isoformat(), "filter_entity_id": entity_id,
+                          "minimal_response": "", "no_attributes": ""})
+    buckets = {}
+    for series in data:
+        for s in series:
+            try:
+                v = float(s["state"])
+                t = datetime.fromisoformat(s.get("last_changed") or s["last_updated"]).astimezone(tz)
+            except (KeyError, ValueError, TypeError):
+                continue
+            buckets.setdefault(t.replace(minute=0, second=0, microsecond=0), []).append(v)
+    return {h: sum(v) / len(v) for h, v in buckets.items()}
+
+
+def compare_models(lat, lon, tz_name, now: datetime):
+    """Log how well several Open-Meteo models matched the measured outdoor
+    temperature over the last 3 days (all hours and nights 20-08 h)."""
+    tz = ZoneInfo(tz_name)
+    r = requests.get("https://api.open-meteo.com/v1/forecast",
+                     params={"latitude": lat, "longitude": lon, "hourly": "temperature_2m",
+                             "models": ",".join(COMPARE_MODELS), "past_days": 3,
+                             "forecast_days": 1, "timezone": tz_name}, timeout=20)
+    r.raise_for_status()
+    hourly = r.json()["hourly"]
+    times = [datetime.fromisoformat(t).replace(tzinfo=tz) for t in hourly["time"]]
+    ref = hourly_means_from_history(OUTDOOR_ENTITY, times[0], now, tz)
+    rows = []
+    for m in COMPARE_MODELS:
+        vals = hourly.get(f"temperature_2m_{m}") or (hourly.get("temperature_2m") if m == "best_match" else None)
+        if not vals:
+            continue
+        d_all, d_night = [], []
+        for t, v in zip(times, vals):
+            if v is None or t >= now.replace(minute=0, second=0, microsecond=0) or t not in ref:
+                continue
+            d = v - ref[t]
+            d_all.append(d)
+            if t.hour >= 20 or t.hour < 8:
+                d_night.append(d)
+        if len(d_night) >= 6:
+            rows.append((sum(abs(x) for x in d_night) / len(d_night), sum(d_night) / len(d_night),
+                         sum(abs(x) for x in d_all) / len(d_all), sum(d_all) / len(d_all), len(d_all), m))
+    if not rows:
+        log(f"Models     : no comparison possible (no overlapping hours with {OUTDOOR_ENTITY})")
+        return
+    rows.sort()
+    log(f"Models     : last 3 days vs {OUTDOOR_ENTITY} (error = model - measured; best night MAE first)"
+        f"{', in use: ' + WEATHER_MODEL if WEATHER_MODEL else ', in use: best_match'}")
+    for mae_n, bias_n, mae_a, bias_a, n, m in rows:
+        log(f"             {m:<22} nights MAE {mae_n:4.1f} bias {bias_n:+4.1f} °C | "
+            f"all hours MAE {mae_a:4.1f} bias {bias_a:+4.1f} °C ({n} h)")
 
 
 # ---------------- learned bivalence ----------------
@@ -357,7 +419,8 @@ def run_forecast(ha_config: dict):
     weather = fetch_weather(lat, lon, tz_name, now)
     if not weather:
         raise RuntimeError("Open-Meteo returned no usable hours")
-    log(f"Weather    : Open-Meteo {lat:.2f},{lon:.2f}, {len(weather)} h from {weather[0][0]:%a %H:%M} | "
+    log(f"Weather    : Open-Meteo {WEATHER_MODEL or 'best_match'} {lat:.2f},{lon:.2f}, "
+        f"{len(weather)} h from {weather[0][0]:%a %H:%M} | "
         f"now {weather[0][1]:.1f} °C, {weather[0][2]:.0f} W/m²")
 
     def empty_day():
@@ -417,6 +480,13 @@ def run_forecast(ha_config: dict):
         temp_hourly.append({"last_updated": start.isoformat(), "temperature": round(T_out, 2),
                             "radiation": round(rad)})
 
+    global _compare_done_for
+    if OUTDOOR_ENTITY and (_compare_done_for is None or (_compare_done_for != now.date() and now.hour >= 7)):
+        _compare_done_for = now.date()
+        try:
+            compare_models(lat, lon, tz_name, now)
+        except Exception as e:
+            log(f"Models     : comparison failed ({e})")
     log(f"Today rest : {fmt_day(day_today)}")
     total_gas = f"{(gas_act or 0) + day_today['gas']:.1f}" if gas_act is not None else "n/a"
     log(f"Today total: HP elec {hp_act + day_today['elec']:.2f} kWh (so far {hp_act:.2f} + rest "
