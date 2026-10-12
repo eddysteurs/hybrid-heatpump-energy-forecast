@@ -47,14 +47,20 @@ blueprint:
         compressor:
           name: Compressor running (optional)
           description: >-
-            Binary sensor that is on while the heat pump compressor runs
-            (e.g. EMS-ESP binary_sensor.boiler_hp_compressor). Used to mark gas that only
-            assists the heat pump; those entries are not used as switch temperature.
+            Entity that shows whether the heat pump compressor runs: a binary sensor
+            (on/off) or a status sensor where any state other than off counts as running
+            (e.g. EMS-ESP sensor.boiler_compressor_activity: heating / defrost / off).
+            Used to mark gas that only assists the heat pump (e.g. during a defrost or the
+            morning warm-up); those entries are not used as switch temperature. Check that
+            it really changes while the heat pump runs: on some Bosch/Buderus systems
+            binary_sensor.boiler_hp_compressor stays off.
           default: ""
           selector:
             entity:
               filter:
-                - domain: binary_sensor
+                - domain:
+                    - binary_sensor
+                    - sensor
         energy_cost_ratio:
           name: Energy cost ratio (optional)
           description: >-
@@ -145,7 +151,9 @@ variables:
   stop_minutes: !input stop_minutes
   t_out: "{{ states(outdoor_entity) | float(0) }}"
   ratio: "{{ states(ratio_entity) | float(0) if ratio_entity else 0 }}"
-  comp: "{{ states(compressor_entity) if compressor_entity else 'off' }}"
+  comp: >-
+    {{ 'on' if compressor_entity and states(compressor_entity) | lower
+       not in ['off', 'unknown', 'unavailable', 'none', '', '0', 'false', 'idle'] else 'off' }}
 
 triggers:
   - trigger: state

@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-VERSION = "2.0.1"
+VERSION = "2.0.2"
 print(f"Hybrid Heatpump Energy Forecast v{VERSION} starting..", flush=True)
 
 OPTIONS_PATH = "/data/options.json"

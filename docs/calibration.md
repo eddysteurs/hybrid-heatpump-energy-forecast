@@ -74,6 +74,26 @@ current ratio the app uses the median of the last 5. Until then it uses
 `hybrid_bivalence_temp`. Changing the ratio on the controller automatically
 starts a new learning series.
 
+When you change the ratio, also set `hybrid_bivalence_temp` by hand to a first
+guess for the new ratio; otherwise the forecast keeps using the old switch
+point until 3 new switches are learned. Reference house: at ratio 1.7 the
+switch was at 6.2 °C; after lowering to 1.5 the heat pump ran alone through a
+night down to 2.4 °C, so the helper was set to 2.0 °C.
+
+Not every gas use is a switch. Hybrid controllers also fire the boiler briefly
+**next to** the running heat pump, typically right after a defrost or during
+the morning warm-up from a night setback. The logger marks these with `p`
+(assist) when the compressor input shows the heat pump running, and they are
+not learned. Use a compressor entity that really follows the compressor: on the
+reference Bosch, `binary_sensor.boiler_hp_compressor` stayed off all night, while
+`sensor.boiler_compressor_activity` showed heating / defrost / off correctly.
+If a wrong entry was learned, edit the history helper and add `p` to it.
+
+## 4b. Night setback and the setpoint
+
+`hybrid_indoor_setpoint` is one value for the whole day. With a night setback,
+use the time-weighted average (e.g. 15 h at 20.5 °C + 9 h at 19.5 °C ≈ 20.1 °C).
+
 ## 5. Choosing the energy cost ratio of the hybrid controller
 
 Bosch / Buderus / Nefit hybrid controllers (and similar) ask for the ratio

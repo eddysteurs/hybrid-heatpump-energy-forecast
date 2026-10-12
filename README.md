@@ -109,7 +109,7 @@ in that house, for reference:
 |---|---|---|---|
 | Gas meter, cumulative | for the switch logger | `sensor.p1_meter_…_total_gas` (HomeWizard P1) | any increasing gas meter in m³ or kWh (P1/DSMR, HomeWizard, …) |
 | Outdoor temperature of the hybrid controller | for the switch logger | `sensor.boiler_outside_temperature` (EMS-ESP) | use the controller's own sensor: that is what it switches on |
-| Compressor running | optional | `binary_sensor.boiler_hp_compressor` (EMS-ESP) | marks gas that only assists the heat pump |
+| Compressor running | optional | `sensor.boiler_compressor_activity` (EMS-ESP; heating/defrost/off) | marks gas that only assists the heat pump |
 | Energy cost ratio of the controller | optional | `number.thermostat_energy_cost_ratio` (EMS-ESP) | switches are stored per ratio, so changing it relearns |
 | Heat pump electricity **today** (kWh, resets at midnight) | optional | `sensor.dag_warmtepomp_verwarming` | e.g. a *Utility Meter* helper (daily cycle) on the heat pump's energy sensor; used for "today total", the 48 h series and forecast-vs-actual |
 | Gas **today** in kWh (resets at midnight) | optional | `sensor.daily_gas_in_kwh_dag` | e.g. a daily Utility Meter on the gas meter × calorific value (≈ 10.5–11.4 kWh/m³) |

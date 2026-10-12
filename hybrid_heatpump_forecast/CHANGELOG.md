@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.2
+- Gas switch logger blueprint: the compressor input now also accepts a status
+  sensor (any state other than off = running), e.g. EMS-ESP
+  `sensor.boiler_compressor_activity` (heating / defrost / off). On some
+  Bosch/Buderus hybrids `binary_sensor.boiler_hp_compressor` stays off while the
+  compressor runs, so gas that only assisted the heat pump (defrost, morning
+  warm-up) was wrongly learned as a switch to gas.
+- Calibration notes: lower `bivalence_temp` after lowering the energy cost
+  ratio; account for night setback in the setpoint.
+
 ## 2.0.1
 - The sensor options (indoor temperature, heat pump / gas today, energy cost
   ratio) are now shown on the Configuration tab by default instead of hidden
