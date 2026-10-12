@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.3
+- Fix: an indoor sensor above the setpoint (sun, cooking, morning boost in one
+  room) made the model forecast no heating at all for many hours. The
+  simulation now starts at the setpoint when the room is warmer, and heat
+  demand follows "hold the setpoint + proportional recovery" without the
+  on/off gate, as a weather-compensated controller does.
+
 ## 2.0.2
 - Gas switch logger blueprint: the compressor input now also accepts a status
   sensor (any state other than off = running), e.g. EMS-ESP

@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-VERSION = "2.0.2"
+VERSION = "2.0.3"
 print(f"Hybrid Heatpump Energy Forecast v{VERSION} starting..", flush=True)
 
 OPTIONS_PATH = "/data/options.json"
@@ -350,7 +350,8 @@ def run_forecast(ha_config: dict):
         log(f"             built-in defaults used for: {', '.join(defaults)}")
     log(f"Bivalence  : {biv_src}")
     gas_txt = f"{gas_act:.1f} kWh" if gas_act is not None else "n/a"
-    log(f"Now        : indoor {indoor:.2f} °C ({INDOOR_ENTITY or 'no sensor, using setpoint'}) | "
+    above = f", above setpoint: simulation starts at {setpoint:.1f}" if indoor > setpoint else ""
+    log(f"Now        : indoor {indoor:.2f} °C ({INDOOR_ENTITY or 'no sensor, using setpoint'}{above}) | "
         f"today so far: HP {hp_act:.2f} kWh elec, gas {gas_txt}")
 
     weather = fetch_weather(lat, lon, tz_name, now)
@@ -368,7 +369,10 @@ def run_forecast(ha_config: dict):
     temp_hourly, elec_48h, gas_48h = [], [{"last_updated": now.isoformat(), "energy": hp_act}], \
         [{"last_updated": now.isoformat(), "energy": 0.0}]
     elec_cum, gas_cum = hp_act, 0.0
-    T_in = indoor
+    # One room above the setpoint (sun, cooking, morning boost) does not mean the
+    # whole house coasts: the controller keeps heating on its heating curve.
+    # Only a shortfall below the setpoint is simulated (extra recovery heat).
+    T_in = min(indoor, setpoint)
 
     for h, (start, T_out, rad) in enumerate(weather):
         ts = start + timedelta(hours=1)
@@ -376,10 +380,11 @@ def run_forecast(ha_config: dict):
         free_kw = gains + solar_m2 * rad / 1000.0
         heat_loss = H * max(0.0, T_in - T_out)
         hp_heat = gas_heat = elec = gas = 0.0
-        if T_in < setpoint:
-            maintain = max(0.0, H * (setpoint - T_out) - free_kw)
-            rec = (setpoint - T_in) * capacity / max(1.0, recovery)
-            need = max(maintain, heat_loss - free_kw + rec)
+        # heat to hold the setpoint plus a proportional recovery term
+        # (T_in converges to the setpoint; no on/off toggling between hours)
+        need = max(0.0, H * (setpoint - T_out) - free_kw
+                   + (setpoint - T_in) * capacity / max(1.0, recovery))
+        if need > 0:
             if T_out < bivalence:
                 gas_heat = min(boiler_max, need)
             else:
