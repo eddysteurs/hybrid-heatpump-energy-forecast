@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-VERSION = "2.1.1"
+VERSION = "2.1.2"
 print(f"Hybrid Heatpump Energy Forecast v{VERSION} starting..", flush=True)
 
 OPTIONS_PATH = "/data/options.json"
@@ -219,15 +219,20 @@ def create_missing_helpers(states: dict):
 def fetch_weather(lat, lon, tz_name, now: datetime):
     """48 hourly (start, temperature, radiation W/m2) from the current hour,
     aligned on Open-Meteo's own timestamps."""
-    r = requests.get(
-        "https://api.open-meteo.com/v1/forecast",
-        params={"latitude": lat, "longitude": lon,
-                "hourly": "temperature_2m,shortwave_radiation",
-                "forecast_days": 3, "timezone": tz_name,
-                **({"models": WEATHER_MODEL} if WEATHER_MODEL else {})},
-        timeout=15,
-    )
-    r.raise_for_status()
+    params = {"latitude": lat, "longitude": lon,
+              "hourly": "temperature_2m,shortwave_radiation",
+              "forecast_days": 3, "timezone": tz_name,
+              **({"models": WEATHER_MODEL} if WEATHER_MODEL else {})}
+    for attempt in range(4):                       # Open-Meteo returns 503 now and then
+        try:
+            r = requests.get("https://api.open-meteo.com/v1/forecast", params=params, timeout=15)
+            r.raise_for_status()
+            break
+        except requests.RequestException as e:
+            if attempt == 3:
+                raise
+            log(f"  ! Open-Meteo attempt {attempt + 1} failed ({e}), retrying in {30 * (attempt + 1)} s")
+            time.sleep(30 * (attempt + 1))
     hourly = r.json()["hourly"]
     tz = ZoneInfo(tz_name)
     this_hour = now.replace(minute=0, second=0, microsecond=0)

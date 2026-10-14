@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.1.2
+- Open-Meteo request is retried up to 3 times (after 30, 60 and 90 s) instead of
+  skipping the whole hourly run on a temporary 503.
+
 ## 2.1.1
 - Fix: forecast-vs-actual took the day's maximum of the daily counters, which
   included the previous day's value carried over at midnight. A day with lower
