@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.1
+- Fix: forecast-vs-actual took the day's maximum of the daily counters, which
+  included the previous day's value carried over at midnight. A day with lower
+  use than the day before got the previous day's total as "actual". Now the
+  last value before midnight is used.
+
 ## 2.1.0
 - New option `weather_model`: choose the Open-Meteo model (empty = best_match).
 - New option `outdoor_temp_entity`: at start and once a day after 07:00 the log

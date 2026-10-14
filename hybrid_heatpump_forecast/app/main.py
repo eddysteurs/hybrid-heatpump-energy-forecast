@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-VERSION = "2.1.0"
+VERSION = "2.1.1"
 print(f"Hybrid Heatpump Energy Forecast v{VERSION} starting..", flush=True)
 
 OPTIONS_PATH = "/data/options.json"
@@ -140,21 +140,30 @@ def call_service(domain: str, service: str, data: dict):
         log(f"  ! service {domain}.{service} failed: {e}")
 
 
-def day_max_from_history(entity_id: str, day_start: datetime):
-    """Highest value of a daily counter during one local day (HA history API)."""
+def day_total_from_history(entity_id: str, day_start: datetime):
+    """Final value of a daily counter (resetting at midnight) for one local day:
+    the last numeric state before the next midnight (HA history API).
+    Not the maximum: the history starts with the previous day's carried-over
+    value and the reset steps down through intermediate values around 00:00."""
     try:
         end = day_start + timedelta(days=1)
         data = ha_get(f"history/period/{day_start.isoformat()}", timeout=20,
                       params={"end_time": end.isoformat(), "filter_entity_id": entity_id,
                               "minimal_response": "", "no_attributes": ""})
-        vals = []
+        last = None
         for series in data:
             for s in series:
                 try:
-                    vals.append(float(s["state"]))
+                    t = datetime.fromisoformat(s.get("last_changed") or s["last_updated"])
+                    v = float(s["state"])
                 except (KeyError, ValueError, TypeError):
-                    pass
-        return max(vals) if vals else None
+                    continue
+                if t >= end:
+                    continue
+                if t <= day_start + timedelta(seconds=1) and s is series[0]:
+                    continue        # value carried over from the previous day
+                last = v
+        return last if last is not None else 0.0
     except Exception as e:
         log(f"  ! history for {entity_id} not readable ({e})")
         return None
@@ -509,8 +518,8 @@ def run_forecast(ha_config: dict):
     if entry is not None and (HP_TODAY_ENTITY or GAS_TODAY_ENTITY):
         if "actual_elec" not in entry:
             yday_start = datetime.combine(yday, datetime.min.time(), tzinfo=ZoneInfo(tz_name))
-            entry["actual_elec"] = day_max_from_history(HP_TODAY_ENTITY, yday_start) if HP_TODAY_ENTITY else None
-            entry["actual_gas"] = day_max_from_history(GAS_TODAY_ENTITY, yday_start) if GAS_TODAY_ENTITY else None
+            entry["actual_elec"] = day_total_from_history(HP_TODAY_ENTITY, yday_start) if HP_TODAY_ENTITY else None
+            entry["actual_gas"] = day_total_from_history(GAS_TODAY_ENTITY, yday_start) if GAS_TODAY_ENTITY else None
         ae, ag = entry.get("actual_elec"), entry.get("actual_gas")
         txt_e = (f"elec forecast {entry['elec']:.1f} / actual {ae:.1f} kWh ({entry['elec'] - ae:+.1f})"
                  if ae is not None else f"elec forecast {entry['elec']:.1f} / actual n/a")
