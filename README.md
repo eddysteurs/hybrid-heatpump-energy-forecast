@@ -72,7 +72,17 @@ the *energy cost ratio* setting), so instead of guessing it, the
 The history (`input_text.hybrid_gas_switch_history`, newest first, e.g.
 `5.9@1.5,8.1@1.5p,6.0@1.5`) is read by the app: with at least 3 real switches
 at the **current** ratio it uses the median of the last 5 as bivalence;
-otherwise the `hybrid_bivalence_temp` helper.
+otherwise the `hybrid_bivalence_temp` helper, lowered to just below the coldest
+recent gas assist at that ratio (the heat pump was still running there, so the
+controller had not switched yet).
+
+> **Ratio entity must show the controller's real value.** On some Bosch RC310
+> setups a write from Home Assistant to `number.thermostat_energy_cost_ratio`
+> shows up in EMS-ESP but is not applied by the controller. Then that entity no
+> longer tells which ratio is in force, and switches get stored under the wrong
+> ratio. Set the ratio on the controller itself and keep an `input_number`
+> with the same value; use that helper as `energy_cost_ratio_entity` here and in
+> the logger blueprint.
 
 ### Results in the author's house
 

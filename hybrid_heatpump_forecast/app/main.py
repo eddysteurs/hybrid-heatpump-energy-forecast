@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-VERSION = "2.1.2"
+VERSION = "2.2.0"
 print(f"Hybrid Heatpump Energy Forecast v{VERSION} starting..", flush=True)
 
 OPTIONS_PATH = "/data/options.json"
@@ -304,33 +304,49 @@ def compare_models(lat, lon, tz_name, now: datetime):
 
 
 # ---------------- learned bivalence ----------------
-def learned_bivalence(history: str, ratio):
-    """Median switch-to-gas temperature of the last 5 real switches at this ratio.
-    History format (newest first): '5.9@1.5,8.1@1.5p,...' (p = gas only assisting)."""
-    temps, other_ratio, assists = [], 0, 0
+def parse_switch_history(history: str, ratio):
+    """Split the logger history (newest first, '5.9@1.5,8.1@1.5p,...', p = gas only
+    assisting the running heat pump) into real switches and assists at this ratio."""
+    switches, assists, other_ratio = [], [], 0
     for item in (history or "").split(","):
         item = item.strip()
         if "@" not in item:
             continue
         t_txt, r_txt = item.split("@", 1)
-        if r_txt.endswith("p"):
-            assists += 1
-            continue
+        assist = r_txt.endswith("p")
         try:
-            t, r = float(t_txt), float(r_txt)
+            t, r = float(t_txt), float(r_txt.rstrip("p"))
         except ValueError:
             continue
         if ratio is not None and abs(r - ratio) > 0.05:
             other_ratio += 1
             continue
-        temps.append(t)
+        (assists if assist else switches).append(t)
+    return switches, assists, other_ratio
+
+
+def learned_bivalence(history: str, ratio):
+    """Median switch-to-gas temperature of the last 5 real switches at this ratio."""
+    temps, assists, other_ratio = parse_switch_history(history, ratio)
     temps = temps[:5]
     if len(temps) < 3:
-        return None, temps, other_ratio, assists
+        return None, temps, other_ratio, len(assists)
     srt = sorted(temps)
     mid = len(srt) // 2
     med = srt[mid] if len(srt) % 2 else (srt[mid - 1] + srt[mid]) / 2
-    return med, temps, other_ratio, assists
+    return med, temps, other_ratio, len(assists)
+
+
+def assist_ceiling(history: str, ratio, margin: float = 0.5):
+    """Highest bivalence the recorded assists allow. An assist at T means the
+    heat pump was still running at T, so the controller had not switched to gas
+    there: the bivalence must be below the coldest recent assist (last 5 at this
+    ratio). None when fewer than 2 assists are recorded."""
+    _, assists, _ = parse_switch_history(history, ratio)
+    assists = assists[:5]
+    if len(assists) < 2:
+        return None, assists
+    return min(assists) - margin, assists
 
 
 # ---------------- forecast memory (forecast vs actual) ----------------
@@ -403,6 +419,12 @@ def run_forecast(ha_config: dict):
                    f"switch(es){f' at ratio {ratio:.1f}' if ratio is not None else ''}; 3 needed to learn)")
     if sw_other or sw_assist:
         biv_src += f" | ignored: {sw_other} at other ratio, {sw_assist} gas-assist"
+    ceiling, assist_temps = assist_ceiling(history, ratio)
+    # Only corrects the helper guess; learned switches at this ratio are real evidence.
+    if learned is None and ceiling is not None and bivalence > ceiling:
+        biv_src += (f" | lowered to {ceiling:.1f} °C: heat pump still ran (gas assist) at "
+                    f"{', '.join(f'{t:.1f}' for t in assist_temps)} °C")
+        bivalence = ceiling
 
     hp_act = num(states, HP_TODAY_ENTITY, 0.0)
     gas_act = num(states, GAS_TODAY_ENTITY)
@@ -538,7 +560,8 @@ def run_forecast(ha_config: dict):
     save_forecast_log(flog)
 
     model = {"heat_loss_kw_per_c": H, "setpoint": setpoint, "bivalence": round(bivalence, 1),
-             "bivalence_source": "learned" if learned is not None else src["bivalence"],
+             "bivalence_source": ("assist ceiling" if learned is None and ceiling is not None and bivalence == ceiling
+                                  else "learned" if learned is not None else src["bivalence"]),
              "cop_plus7": cop_p7, "cop_minus7": cop_m7, "hp_max_kw": hp_max,
              "internal_gains_kw": gains, "solar_gain_m2": solar_m2, "boiler_max_kw": boiler_max,
              "boiler_efficiency": BOILER_EFF, "balance_temp": round(balance, 1),

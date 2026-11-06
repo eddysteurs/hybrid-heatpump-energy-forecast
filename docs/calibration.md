@@ -78,7 +78,15 @@ When you change the ratio, also set `hybrid_bivalence_temp` by hand to a first
 guess for the new ratio; otherwise the forecast keeps using the old switch
 point until 3 new switches are learned. Reference house: at ratio 1.7 the
 switch was at 6.2 °C; after lowering to 1.5 the heat pump ran alone through a
-night down to 2.4 °C, so the helper was set to 2.0 °C.
+night down to 2.4 °C, so the helper was set to 2.0 °C. Since 2.2.0 recorded
+gas assists also lower the guess: in November the heat pump kept running at
+0.6–0.9 °C with only gas assists, so with 2 or more assists the app caps the
+bivalence just below the coldest one until real switches are learned.
+
+The ratio the controller acts on is not always the one Home Assistant shows: on
+the reference RC310, writes from HA appeared in EMS-ESP but were not applied.
+Change the ratio on the controller and mirror it in an `input_number`, and point
+the app and the logger blueprint at that helper.
 
 Not every gas use is a switch. Hybrid controllers also fire the boiler briefly
 **next to** the running heat pump, typically right after a defrost or during
