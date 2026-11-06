@@ -83,10 +83,15 @@ gas assists also lower the guess: in November the heat pump kept running at
 0.6–0.9 °C with only gas assists, so with 2 or more assists the app caps the
 bivalence just below the coldest one until real switches are learned.
 
-The ratio the controller acts on is not always the one Home Assistant shows: on
-the reference RC310, writes from HA appeared in EMS-ESP but were not applied.
-Change the ratio on the controller and mirror it in an `input_number`, and point
-the app and the logger blueprint at that helper.
+Change the ratio on the controller itself: on the reference RC310, writes from
+HA appeared in EMS-ESP but were not applied, while changes made on the
+controller are read back correctly.
+
+After a controller software update (summer 2026) the reference RC310 no longer
+switched fully to gas at ratios 1.5, 1.7 or 2.0, not even at 0.6 °C outdoor;
+the boiler only assisted after defrosts and during the morning warm-up. Before
+the update ratio 1.7 meant a switch at about 6 °C. So don't take a learned
+switch temperature from before an update for granted.
 
 Not every gas use is a switch. Hybrid controllers also fire the boiler briefly
 **next to** the running heat pump, typically right after a defrost or during

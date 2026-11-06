@@ -76,13 +76,11 @@ otherwise the `hybrid_bivalence_temp` helper, lowered to just below the coldest
 recent gas assist at that ratio (the heat pump was still running there, so the
 controller had not switched yet).
 
-> **Ratio entity must show the controller's real value.** On some Bosch RC310
-> setups a write from Home Assistant to `number.thermostat_energy_cost_ratio`
-> shows up in EMS-ESP but is not applied by the controller. Then that entity no
-> longer tells which ratio is in force, and switches get stored under the wrong
-> ratio. Set the ratio on the controller itself and keep an `input_number`
-> with the same value; use that helper as `energy_cost_ratio_entity` here and in
-> the logger blueprint.
+> **Change the ratio on the controller itself.** On the reference Bosch RC310 a
+> write from Home Assistant to `number.thermostat_energy_cost_ratio` shows up in
+> EMS-ESP but is not applied by the controller. A change made on the controller
+> is read back correctly, so set it there; the entity then tells which ratio is
+> in force and switches are stored under the right ratio.
 
 ### Results in the author's house
 
