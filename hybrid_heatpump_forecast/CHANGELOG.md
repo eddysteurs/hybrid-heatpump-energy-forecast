@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.2.0
+- Gas-assist entries now lower the bivalence guess. An assist (`p`) at T means
+  the heat pump was still running at T, so the controller had not switched to
+  gas there. With fewer than 3 real switches at the current ratio and at least
+  2 assists, the bivalence is capped at the coldest of the last 5 assists
+  − 0.5 °C (logged as "lowered to …"; model attribute `bivalence_source:
+  assist ceiling`). Learned switches are not overridden. Reference house: the
+  helper guess of 2.0 °C forecast 52 kWh gas for a night at 0.6–1 °C while the
+  heat pump kept running and the boiler only assisted (2.3 kWh actual).
+- Assists recorded at another ratio are no longer counted as assists for the
+  current ratio in the `Bivalence` log line.
+
 ## 2.1.2
 - Open-Meteo request is retried up to 3 times (after 30, 60 and 90 s) instead of
   skipping the whole hourly run on a temporary 503.
