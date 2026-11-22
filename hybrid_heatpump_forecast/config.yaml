@@ -1,5 +1,5 @@
 name: Hybrid Heatpump Energy Forecast
-version: "2.2.0"
+version: "2.3.0"
 slug: hybrid_heatpump_forecast
 description: >-
   48 h forecast of heat demand, heat pump electricity and gas for a hybrid
@@ -33,6 +33,8 @@ schema:
   weather_model: str?
   outdoor_temp_entity: str?
   switch_history_entity: str?
+  return_temp_entity: str?
+  on_gas_entity: str?
   sensor_prefix: str?
   timezone: str?
   ha_url: str?

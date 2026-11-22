@@ -9,7 +9,8 @@ Model per hour:
   heat demand = heat_loss * (setpoint - T_out) - internal gains - solar gain
   (with a simple thermal-mass simulation of the indoor temperature)
   T_out >= bivalence  -> heat pump up to hp_max_thermal_kw, boiler tops up
-  T_out <  bivalence  -> boiler only
+  T_out <  bivalence  -> boiler only, and it stays on the boiler until T_out
+                         reaches the return temperature (hysteresis)
   heat pump electricity = heat / COP(T_out), COP linear between -7 and +7 °C
   gas = boiler heat / boiler efficiency
 
@@ -24,7 +25,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 print(f"Hybrid Heatpump Energy Forecast v{VERSION} starting..", flush=True)
 
 OPTIONS_PATH = "/data/options.json"
@@ -61,6 +62,8 @@ HP_TODAY_ENTITY = opt("hp_energy_today_entity")          # daily HP electricity,
 GAS_TODAY_ENTITY = opt("gas_energy_today_entity")        # daily gas kWh, resets at midnight
 RATIO_ENTITY = opt("energy_cost_ratio_entity")           # e.g. number.thermostat_energy_cost_ratio
 SWITCH_HISTORY_ENTITY = opt("switch_history_entity", "input_text.hybrid_gas_switch_history")
+RETURN_TEMP_ENTITY = opt("return_temp_entity", "input_number.hybrid_hp_return_temp")  # logger: last back-to-HP temp
+ON_GAS_ENTITY = opt("on_gas_entity", "input_boolean.hybrid_on_gas")                 # logger: boiler running now
 CREATE_HELPERS = bool(cfg.get("create_helpers", True))
 WEATHER_MODEL = opt("weather_model")                     # Open-Meteo model, empty = best_match
 OUTDOOR_ENTITY = opt("outdoor_temp_entity")              # measured outdoor temp, for the model comparison
@@ -426,6 +429,16 @@ def run_forecast(ha_config: dict):
                     f"{', '.join(f'{t:.1f}' for t in assist_temps)} °C")
         bivalence = ceiling
 
+    # Hysteresis: after a full switch the controller stays on gas until it is
+    # clearly warmer (reference house: switch ~1.8 °C, back to the heat pump at
+    # 5-7 °C). Use the logger's last return temperature, never below bivalence.
+    ret_raw = num(states, RETURN_TEMP_ENTITY) if RETURN_TEMP_ENTITY else None
+    return_temp = max(bivalence, ret_raw) if ret_raw is not None else bivalence
+    on_gas_now = (states.get(ON_GAS_ENTITY) or {}).get("state") == "on" if ON_GAS_ENTITY else False
+    ret_src = (f"{return_temp:.1f} °C from {RETURN_TEMP_ENTITY}" if ret_raw is not None
+               else "none (= bivalence, no hysteresis)")
+    biv_src += f" | back to heat pump at {ret_src} | on gas now: {'yes' if on_gas_now else 'no'}"
+
     hp_act = num(states, HP_TODAY_ENTITY, 0.0)
     gas_act = num(states, GAS_TODAY_ENTITY)
     indoor = num(states, INDOOR_ENTITY, p["setpoint"])
@@ -472,6 +485,7 @@ def run_forecast(ha_config: dict):
     # whole house coasts: the controller keeps heating on its heating curve.
     # Only a shortfall below the setpoint is simulated (extra recovery heat).
     T_in = min(indoor, setpoint)
+    gas_mode = on_gas_now
 
     for h, (start, T_out, rad) in enumerate(weather):
         ts = start + timedelta(hours=1)
@@ -483,8 +497,12 @@ def run_forecast(ha_config: dict):
         # (T_in converges to the setpoint; no on/off toggling between hours)
         need = max(0.0, H * (setpoint - T_out) - free_kw
                    + (setpoint - T_in) * capacity / max(1.0, recovery))
+        if T_out < bivalence:
+            gas_mode = True
+        elif T_out >= return_temp:
+            gas_mode = False
         if need > 0:
-            if T_out < bivalence:
+            if gas_mode:
                 gas_heat = min(boiler_max, need)
             else:
                 hp_heat = min(hp_max, need)
@@ -538,7 +556,8 @@ def run_forecast(ha_config: dict):
     flog[tomorrow.isoformat()] = {
         "elec": round(day_tom["elec"], 2), "gas": round(day_tom["gas"], 1), "heat": round(day_tom["heat"], 1),
         "mean_temp": round(sum(day_tom["temps"]) / len(day_tom["temps"]), 1) if day_tom["temps"] else None,
-        "bivalence": round(bivalence, 1), "made": now.isoformat(timespec="minutes"),
+        "bivalence": round(bivalence, 1), "return_temp": round(return_temp, 1),
+        "made": now.isoformat(timespec="minutes"),
     }
     yday = now.date() - timedelta(days=1)
     entry = flog.get(yday.isoformat())
@@ -562,6 +581,7 @@ def run_forecast(ha_config: dict):
     model = {"heat_loss_kw_per_c": H, "setpoint": setpoint, "bivalence": round(bivalence, 1),
              "bivalence_source": ("assist ceiling" if learned is None and ceiling is not None and bivalence == ceiling
                                   else "learned" if learned is not None else src["bivalence"]),
+             "return_temp": round(return_temp, 1), "on_gas_now": on_gas_now,
              "cop_plus7": cop_p7, "cop_minus7": cop_m7, "hp_max_kw": hp_max,
              "internal_gains_kw": gains, "solar_gain_m2": solar_m2, "boiler_max_kw": boiler_max,
              "boiler_efficiency": BOILER_EFF, "balance_temp": round(balance, 1),
@@ -613,7 +633,8 @@ def main():
     tz_name = opt("timezone") or ha_config.get("time_zone") or "Europe/Brussels"
     log(f"Options    : HA {HA_URL}, timezone {tz_name}, boiler efficiency {BOILER_EFF}, "
         f"indoor {INDOOR_ENTITY or '-'}, HP today {HP_TODAY_ENTITY or '-'}, gas today {GAS_TODAY_ENTITY or '-'}, "
-        f"cost ratio {RATIO_ENTITY or '-'}, switch history {SWITCH_HISTORY_ENTITY}")
+        f"cost ratio {RATIO_ENTITY or '-'}, switch history {SWITCH_HISTORY_ENTITY}, "
+        f"return temp {RETURN_TEMP_ENTITY or '-'}, on gas {ON_GAS_ENTITY or '-'}")
     log(f"Forecast log: {FORECAST_LOG}")
     for value, name, effect in (
             (INDOOR_ENTITY, "indoor_temp_entity", "simulation starts at the setpoint"),

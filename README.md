@@ -54,12 +54,16 @@ free heat      = internal gains + solar_gain_m2 × radiation
 heat demand    = heat_loss × (setpoint − T_outdoor) − free heat      (≥ 0)
                  + recovery when the (simulated) indoor temperature is below setpoint
 T_outdoor ≥ bivalence → heat pump up to hp_max_thermal_kw, boiler tops up the rest
-T_outdoor <  bivalence → boiler only (up to boiler_max_kw)
+T_outdoor <  bivalence → boiler only (up to boiler_max_kw), and it stays on
+                 the boiler until T_outdoor ≥ return temperature (hysteresis)
 electricity    = heat pump heat / COP(T_outdoor)     COP linear between −7 °C and +7 °C
 gas            = boiler heat / boiler efficiency
 ```
 
 The **bivalence temperature** is where the hybrid controller hands over to gas.
+The **return temperature** is where it goes back to the heat pump; the forecast
+reads it from `input_number.hybrid_hp_return_temp` (written by the logger) and
+starts in gas mode when `input_boolean.hybrid_on_gas` is on.
 That depends on the controller's own logic (for Bosch/Buderus/Nefit hybrids:
 the *energy cost ratio* setting), so instead of guessing it, the
 **gas switch logger** blueprint watches the gas meter:

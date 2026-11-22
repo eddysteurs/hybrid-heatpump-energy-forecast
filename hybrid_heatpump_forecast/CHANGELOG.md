@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.3.0
+- Hysteresis: after a full switch to gas the forecast now stays on gas until the
+  outdoor temperature reaches the last return-to-heat-pump temperature recorded by
+  the logger (`input_number.hybrid_hp_return_temp`, never below the bivalence), and
+  it starts in gas mode when `input_boolean.hybrid_on_gas` is on. Reference house:
+  switch at ~1.8 °C but back to the heat pump only at 5–7 °C; for 21 Nov the old
+  model forecast 36 kWh gas against 92 kWh actual.
+- New options `return_temp_entity` and `on_gas_entity` (defaults are the logger's
+  helpers). Model attribute and forecast log show `return_temp`.
+
 ## 2.2.0
 - Gas-assist entries now lower the bivalence guess. An assist (`p`) at T means
   the heat pump was still running at T, so the controller had not switched to

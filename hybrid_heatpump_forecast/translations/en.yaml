@@ -38,6 +38,17 @@ configuration:
   switch_history_entity:
     name: Switch history helper
     description: input_text written by the gas switch logger blueprint. Default input_text.hybrid_gas_switch_history.
+  return_temp_entity:
+    name: Return temperature helper
+    description: >-
+      input_number written by the gas switch logger blueprint with the outdoor temperature of the
+      last return to the heat pump. After a full switch the forecast stays on gas until this
+      temperature. Default input_number.hybrid_hp_return_temp.
+  on_gas_entity:
+    name: On gas helper
+    description: >-
+      input_boolean the logger keeps on while the boiler runs; tells the forecast whether it starts
+      in gas mode. Default input_boolean.hybrid_on_gas.
   sensor_prefix:
     name: Sensor prefix
     description: Output sensors are sensor.<prefix>_electricity_today etc. Default "hybrid".
